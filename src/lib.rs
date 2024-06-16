@@ -1,18 +1,13 @@
+use core::{compute_fallback_voice_id, consts::*, Voice};
 use nih_plug::prelude::*;
+use nih_plug_vizia::ViziaState;
 use rand::Rng;
 use rand_pcg::Pcg32;
 use std::sync::Arc;
 
-/// The number of simultaneous voices for this synth.
-const NUM_VOICES: u32 = 16;
-/// The maximum size of an audio block. We'll split up the audio in blocks and render smoothed
-/// values to buffers since these values may need to be reused for multiple voices.
-const MAX_BLOCK_SIZE: usize = 64;
-
-// Polyphonic modulation works by assigning integer IDs to parameters. Pattern matching on these in
-// `PolyModulation` and `MonoAutomation` events makes it possible to easily link these events to the
-// correct parameter.
-const GAIN_POLY_MOD_ID: u32 = 0;
+mod core;
+mod editor;
+mod model;
 
 /// A simple polyphonic synthesizer with support for CLAP's polyphonic modulation. See
 /// `NoteEvent::PolyModulation` for another source of information on how to use this.
@@ -40,42 +35,11 @@ struct OneXOscParams {
     /// The amplitude envelope release time. This is the same for every voice.
     #[id = "amp_rel"]
     amp_release_ms: FloatParam,
-}
 
-/// Data for a single synth voice. In a real synth where performance matter, you may want to use a
-/// struct of arrays instead of having a struct for each voice.
-#[derive(Debug, Clone)]
-struct Voice {
-    /// The identifier for this voice. Polyphonic modulation events are linked to a voice based on
-    /// these IDs. If the host doesn't provide these IDs, then this is computed through
-    /// `compute_fallback_voice_id()`. In that case polyphonic modulation will not work, but the
-    /// basic note events will still have an effect.
-    voice_id: i32,
-    /// The note's channel, in `0..16`. Only used for the voice terminated event.
-    channel: u8,
-    /// The note's key/note, in `0..128`. Only used for the voice terminated event.
-    note: u8,
-    /// The voices internal ID. Each voice has an internal voice ID one higher than the previous
-    /// voice. This is used to steal the last voice in case all 16 voices are in use.
-    internal_voice_id: u64,
-    /// The square root of the note's velocity. This is used as a gain multiplier.
-    velocity_sqrt: f32,
-
-    /// The voice's current phase. This is randomized at the start of the voice
-    phase: f32,
-    /// The phase increment. This is based on the voice's frequency, derived from the note index.
-    /// Since we don't support pitch expressions or pitch bend, this value stays constant for the
-    /// duration of the voice.
-    phase_delta: f32,
-    /// Whether the key has been released and the voice is in its release stage. The voice will be
-    /// terminated when the amplitude envelope hits 0 while the note is releasing.
-    releasing: bool,
-    /// Fades between 0 and 1 with timings based on the global attack and release settings.
-    amp_envelope: Smoother<f32>,
-
-    /// If this voice has polyphonic gain modulation applied, then this contains the normalized
-    /// offset and a smoother.
-    voice_gain: Option<(f32, Smoother<f32>)>,
+    /// The editor state, saved together with the parameter state so the custom scaling can be
+    /// restored.
+    #[persist = "editor-state"]
+    editor_state: Arc<ViziaState>,
 }
 
 impl Default for OneXOsc {
@@ -136,6 +100,7 @@ impl Default for OneXOscParams {
             )
             .with_step_size(0.1)
             .with_unit(" ms"),
+            editor_state: editor::default_state(),
         }
     }
 }
@@ -174,6 +139,10 @@ impl Plugin for OneXOsc {
 
         self.voices.fill(None);
         self.next_internal_voice_id = 0;
+    }
+
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        editor::create(self.params.clone(), self.params.editor_state.clone())
     }
 
     fn process(
@@ -580,12 +549,6 @@ impl OneXOsc {
             }
         }
     }
-}
-
-/// Compute a voice ID in case the host doesn't provide them. Polyphonic modulation will not work in
-/// this case, but playing notes will.
-const fn compute_fallback_voice_id(note: u8, channel: u8) -> i32 {
-    note as i32 | ((channel as i32) << 16)
 }
 
 impl ClapPlugin for OneXOsc {
