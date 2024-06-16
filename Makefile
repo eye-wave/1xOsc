@@ -1,11 +1,14 @@
 #!make
 .PHONY: dev build post-build format lint test
 
+project_name := "one_x_osc"
+
 dev:
-	cargo watch -x build -s "make post-build"
+	cargo watch -x "xtask bundle $(project_name)" -s "make post-build"
 
 build:
-	cargo xtask bundle one_x_osc --release
+	cargo xtask bundle $(project_name) --release
+	$(MAKE) post-build
 
 post-build:
 	cp target/bundled/*.clap ~/.clap
