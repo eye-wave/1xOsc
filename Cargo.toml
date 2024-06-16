@@ -15,6 +15,8 @@ members = ["xtask"]
 crate-type = ["cdylib","lib"]
 
 [dependencies]
+atomic_float = "0.1"
+cyma = { git = "https://github.com/223230/cyma.git" }
 # Remove the `assert_process_allocs` feature to allow allocations on the audio
 # thread in debug builds.
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs", "standalone"] }
@@ -22,8 +24,8 @@ nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["a
 # the GPL compatibility requirement
 # nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", default_features = false, features = ["assert_process_allocs"] }
 nih_plug_vizia = { git = "https://github.com/robbert-vdh/nih-plug.git" }
-atomic_float = "0.1"
-cyma = { git = "https://github.com/223230/cyma.git" }
+rand = "0.8.5"
+rand_pcg = "0.3.1"
 
 [profile.release]
 lto = "thin"
