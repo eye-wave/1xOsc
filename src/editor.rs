@@ -6,9 +6,6 @@ use std::sync::Arc;
 
 use crate::OneXOscParams;
 
-mod button;
-mod knob;
-
 #[derive(Lens)]
 struct AppData {
     params: Arc<OneXOscParams>,

@@ -1,6 +1,6 @@
-use core::{compute_fallback_voice_id, consts::*, Voice};
+use core::{compute_fallback_voice_id, consts::*, OneXOscParams, Voice};
+use model::osc::OscillatorType;
 use nih_plug::prelude::*;
-use nih_plug_vizia::ViziaState;
 use rand::Rng;
 use rand_pcg::Pcg32;
 use std::sync::Arc;
@@ -9,38 +9,7 @@ mod core;
 mod editor;
 mod model;
 
-/// A simple polyphonic synthesizer with support for CLAP's polyphonic modulation. See
-/// `NoteEvent::PolyModulation` for another source of information on how to use this.
-pub struct OneXOsc {
-    params: Arc<OneXOscParams>,
-
-    /// A pseudo-random number generator. This will always be reseeded with the same seed when the
-    /// synth is reset. That way the output is deterministic when rendering multiple times.
-    prng: Pcg32,
-    /// The synth's voices. Inactive voices will be set to `None` values.
-    voices: [Option<Voice>; NUM_VOICES as usize],
-    /// The next internal voice ID, used only to figure out the oldest voice for voice stealing.
-    /// This is incremented by one each time a voice is created.
-    next_internal_voice_id: u64,
-}
-
-#[derive(Params)]
-struct OneXOscParams {
-    /// A voice's gain. This can be polyphonically modulated.
-    #[id = "gain"]
-    gain: FloatParam,
-    /// The amplitude envelope attack time. This is the same for every voice.
-    #[id = "amp_atk"]
-    amp_attack_ms: FloatParam,
-    /// The amplitude envelope release time. This is the same for every voice.
-    #[id = "amp_rel"]
-    amp_release_ms: FloatParam,
-
-    /// The editor state, saved together with the parameter state so the custom scaling can be
-    /// restored.
-    #[persist = "editor-state"]
-    editor_state: Arc<ViziaState>,
-}
+pub use core::OneXOsc;
 
 impl Default for OneXOsc {
     fn default() -> Self {
@@ -100,6 +69,7 @@ impl Default for OneXOscParams {
             )
             .with_step_size(0.1)
             .with_unit(" ms"),
+            osc_type: EnumParam::new("osc_type", OscillatorType::default()),
             editor_state: editor::default_state(),
         }
     }
@@ -362,7 +332,17 @@ impl Plugin for OneXOsc {
 
                 for (value_idx, sample_idx) in (block_start..block_end).enumerate() {
                     let amp = voice.velocity_sqrt * gain[value_idx] * voice_amp_envelope[value_idx];
-                    let sample = (voice.phase * 2.0 - 1.0) * amp;
+                    let sample = match self.params.osc_type.value() {
+                        OscillatorType::Sine => {
+                            (voice.phase * 2.0 * std::f32::consts::PI).sin() * amp
+                        }
+                        OscillatorType::Triangle => (2.0 * (voice.phase - 0.5).abs() - 1.0) * amp,
+                        OscillatorType::Square => {
+                            (if voice.phase < 0.5 { 1.0 } else { -1.0 }) * amp
+                        }
+                        OscillatorType::Sawtooth => (voice.phase * 2.0 - 1.0) * amp,
+                        OscillatorType::Noise => (self.prng.gen::<f32>() * 2.0 - 1.0) * amp,
+                    };
 
                     voice.phase += voice.phase_delta;
                     if voice.phase >= 1.0 {

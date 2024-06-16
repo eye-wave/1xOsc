@@ -8,3 +8,9 @@ pub enum OscillatorType {
     Sawtooth,
     Noise,
 }
+
+impl Default for OscillatorType {
+    fn default() -> Self {
+        Self::Sine
+    }
+}
