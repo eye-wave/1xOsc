@@ -28,6 +28,9 @@ build:
 	$(MAKE) post-build
 
 post-build:
+	@mkdir -p $(VST3_PATH)
+	@mkdir -p $(CLAP_PATH)
+
 	cp target/bundled/*.clap $(CLAP_PATH)
 	cp target/bundled/*.vst3 $(VST3_PATH) -r
 
