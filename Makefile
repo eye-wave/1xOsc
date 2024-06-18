@@ -1,7 +1,10 @@
 #!make
-.PHONY: dev build post-build format lint test
+.PHONY: preview dev build post-build format lint test
 
 project_name := "one_x_osc"
+
+preview:
+	cargo watch -x run
 
 dev:
 	cargo watch -x "xtask bundle $(project_name)" -s "make post-build"

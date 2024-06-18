@@ -1,15 +1,104 @@
-use core::{compute_fallback_voice_id, consts::*, OneXOscParams, Voice};
 use model::osc::OscillatorType;
+use nih_plug::params::{EnumParam, FloatParam, Params};
 use nih_plug::prelude::*;
+use nih_plug_vizia::ViziaState;
 use rand::Rng;
 use rand_pcg::Pcg32;
 use std::sync::Arc;
 
-mod core;
 mod editor;
 mod model;
 
-pub use core::OneXOsc;
+/// The number of simultaneous voices for this synth.
+const NUM_VOICES: u32 = 16;
+/// The maximum size of an audio block. We'll split up the audio in blocks and render smoothed
+/// values to buffers since these values may need to be reused for multiple voices.
+const MAX_BLOCK_SIZE: usize = 64;
+
+// Polyphonic modulation works by assigning integer IDs to parameters. Pattern matching on these in
+// `PolyModulation` and `MonoAutomation` events makes it possible to easily link these events to the
+// correct parameter.
+const GAIN_POLY_MOD_ID: u32 = 0;
+
+/// A simple polyphonic synthesizer with support for CLAP's polyphonic modulation. See
+/// `NoteEvent::PolyModulation` for another source of information on how to use this.
+pub struct OneXOsc {
+    pub params: Arc<OneXOscParams>,
+
+    /// A pseudo-random number generator. This will always be reseeded with the same seed when the
+    /// synth is reset. That way the output is deterministic when rendering multiple times.
+    pub prng: Pcg32,
+    /// The synth's voices. Inactive voices will be set to `None` values.
+    pub voices: [Option<Voice>; NUM_VOICES as usize],
+    /// The next internal voice ID, used only to figure out the oldest voice for voice stealing.
+    /// This is incremented by one each time a voice is created.
+    pub next_internal_voice_id: u64,
+}
+
+#[derive(Params)]
+pub struct OneXOscParams {
+    /// A voice's gain. This can be polyphonically modulated.
+    #[id = "gain"]
+    pub gain: FloatParam,
+    /// The amplitude envelope attack time. This is the same for every voice.
+    #[id = "amp_atk"]
+    pub amp_attack_ms: FloatParam,
+    /// The amplitude envelope release time. This is the same for every voice.
+    #[id = "amp_rel"]
+    pub amp_release_ms: FloatParam,
+
+    /// The editor state, saved together with the parameter state so the custom scaling can be
+    /// restored.
+    #[persist = "editor-state"]
+    pub editor_state: Arc<ViziaState>,
+
+    #[id = "osc_type"]
+    pub osc_type: EnumParam<OscillatorType>,
+}
+
+use nih_plug::prelude::Smoother;
+
+/// Data for a single synth voice. In a real synth where performance matter, you may want to use a
+/// struct of arrays instead of having a struct for each voice.
+#[derive(Debug, Clone)]
+pub struct Voice {
+    /// The identifier for this voice. Polyphonic modulation events are linked to a voice based on
+    /// these IDs. If the host doesn't provide these IDs, then this is computed through
+    /// `compute_fallback_voice_id()`. In that case polyphonic modulation will not work, but the
+    /// basic note events will still have an effect.
+    pub voice_id: i32,
+    /// The note's channel, in `0..16`. Only used for the voice terminated event.
+    pub channel: u8,
+    /// The note's key/note, in `0..128`. Only used for the voice terminated event.
+    pub note: u8,
+    /// The voices internal ID. Each voice has an internal voice ID one higher than the previous
+    /// voice. This is used to steal the last voice in case all 16 voices are in use.
+    pub internal_voice_id: u64,
+    /// The square root of the note's velocity. This is used as a gain multiplier.
+    pub velocity_sqrt: f32,
+
+    /// The voice's current phase. This is randomized at the start of the voice
+    pub phase: f32,
+    /// The phase increment. This is based on the voice's frequency, derived from the note index.
+    /// Since we don't support pitch expressions or pitch bend, this value stays constant for the
+    /// duration of the voice.
+    pub phase_delta: f32,
+    /// Whether the key has been released and the voice is in its release stage. The voice will be
+    /// terminated when the amplitude envelope hits 0 while the note is releasing.
+    pub releasing: bool,
+    /// Fades between 0 and 1 with timings based on the global attack and release settings.
+    pub amp_envelope: Smoother<f32>,
+
+    /// If this voice has polyphonic gain modulation applied, then this contains the normalized
+    /// offset and a smoother.
+    pub voice_gain: Option<(f32, Smoother<f32>)>,
+}
+
+/// Compute a voice ID in case the host doesn't provide them. Polyphonic modulation will not work in
+/// this case, but playing notes will.
+pub fn compute_fallback_voice_id(note: u8, channel: u8) -> i32 {
+    note as i32 | ((channel as i32) << 16)
+}
 
 impl Default for OneXOsc {
     fn default() -> Self {
