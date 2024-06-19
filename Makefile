@@ -18,14 +18,15 @@ ifeq ($(UNAME), Darwin)
 endif
 
 preview:
+	RUSTC_WRAPPER=sccache
 	cargo watch -x run
 
 dev:
+	RUSTC_WRAPPER=sccache
 	cargo watch -x "xtask bundle $(PROJECT_NAME)" -s "make post-build"
 
 build:
 	cargo xtask bundle $(PROJECT_NAME) --release
-	$(MAKE) post-build
 
 post-build:
 	@mkdir -p $(VST3_PATH)

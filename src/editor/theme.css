@@ -2,22 +2,23 @@
   background-color: #333;
 }
 
-image.osc-btn {
+hstack.osc-btn {
   border-radius: 100%;
   background-color: #444;
   background-size: cover;
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
+  border: 4px solid #404040;
 
   top: 20px;
   right: 10px;
 }
 
-image.osc-btn:nth-child(1) {
+hstack.osc-btn:nth-child(1) {
   left: 10px;
 }
 
-image.osc-btn:checked {
+hstack.osc-btn:checked {
   background-color: #888;
   border: 4px solid #aa8;
 }

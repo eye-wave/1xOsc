@@ -1,6 +1,10 @@
 use nih_plug::params::{EnumParam, Param};
 use nih_plug_vizia::{vizia::prelude::*, widgets::param_base::ParamWidgetBase};
 
+use super::icons::{
+    Icon, Point, NOISE_ICON_POINTS, SAW_ICON_POINTS, SINE_ICON_POINTS, SQUARE_ICON_POINTS,
+    TRIANGLE_ICON_POINTS,
+};
 use crate::model::osc::OscillatorType;
 
 enum RadioEvent {
@@ -47,20 +51,27 @@ impl BtnGroup {
         .build(cx, |cx| {
             HStack::new(cx, |cx| {
                 Binding::new(cx, Self::current_state, |cx, state| {
-                    [
-                        (OscillatorType::Sine, "sine-wave.png"),
-                        (OscillatorType::Triangle, "triangle-wave.png"),
-                        (OscillatorType::Square, "square-wave.png"),
-                        (OscillatorType::Sawtooth, "saw-wave.png"),
-                        (OscillatorType::Noise, "noise.png"),
-                    ]
-                    .iter()
-                    .for_each(|(variant, src)| {
-                        Image::new(cx, *src)
-                            .on_mouse_up(|cx, _| cx.emit(RadioEvent::Set(*variant)))
-                            .checked(state.map(|v| v.same(variant)))
+                    ([
+                        (OscillatorType::Sine, SINE_ICON_POINTS.to_vec()),
+                        (OscillatorType::Triangle, TRIANGLE_ICON_POINTS.to_vec()),
+                        (OscillatorType::Square, SQUARE_ICON_POINTS.to_vec()),
+                        (OscillatorType::Sawtooth, SAW_ICON_POINTS.to_vec()),
+                        (OscillatorType::Noise, NOISE_ICON_POINTS.to_vec()),
+                    ] as [(OscillatorType, Vec<Point>); 5])
+                        .iter()
+                        .for_each(|(variant, points)| {
+                            let variant = *variant;
+                            let points = points.clone();
+
+                            HStack::new(cx, move |cx| {
+                                Icon::new(cx, points.clone());
+                            })
+                            .width(Pixels(48.0))
+                            .height(Pixels(48.0))
+                            .on_mouse_up(move |cx, _| cx.emit(RadioEvent::Set(variant)))
+                            .checked(state.map(move |v| v.same(&variant)))
                             .class("osc-btn");
-                    });
+                        });
                 });
             });
         })
