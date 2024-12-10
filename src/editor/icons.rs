@@ -19,8 +19,8 @@ impl View for Icon {
         let bg_color: vg::Color = cx.background_color().into();
         let stroke_color: vg::Color = cx.font_color().into();
 
-        let margin = 16.0;
         let bounds = cx.bounds();
+        let margin = bounds.w * 0.2;
 
         let x = bounds.x + margin / 2.0;
         let y = bounds.y + margin / 2.0;
